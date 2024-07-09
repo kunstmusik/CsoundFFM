@@ -30,7 +30,12 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
 import static java.lang.foreign.ValueLayout.ADDRESS;
+import static java.lang.foreign.ValueLayout.JAVA_DOUBLE;
+import static java.lang.foreign.ValueLayout.JAVA_INT;
+
 import java.lang.invoke.MethodHandle;
+import java.nio.DoubleBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 
 /**
@@ -41,7 +46,29 @@ public class Csound {
 
     private static MethodHandle csoundInitialize = null;
     private static MethodHandle csoundCreate = null;
-    
+    private static MethodHandle csoundGetVersion = null;
+    private static MethodHandle csoundSetOption = null;
+    private static MethodHandle csoundEvalCode = null;
+    private static MethodHandle csoundCompileOrc = null;
+    private static MethodHandle csoundCompileOrcAsync = null;
+    private static MethodHandle csoundCompileCsdText = null;
+    private static MethodHandle csoundGetScoreTime = null;
+    private static MethodHandle csoundInputMessage = null;
+    private static MethodHandle csoundInputMessageAsync = null;
+    private static MethodHandle csoundReadScore = null;
+    private static MethodHandle csoundReadScoreAsync = null;
+    private static MethodHandle csoundPerformKsmps = null;
+
+    private static MethodHandle csoundStart = null;
+    private static MethodHandle csoundStop = null;
+
+    private static MethodHandle csoundGetSr;
+    private static MethodHandle csoundGetKr;
+    private static MethodHandle csoundGetKsmps;
+    private static MethodHandle csoundGetNchnls;
+    private static MethodHandle csoundGetNchnlsInput;
+    private static MethodHandle csoundGet0dBFS;
+
     private MemorySegment csoundInstance;
 
     private static void initialize() {
@@ -80,15 +107,72 @@ public class Csound {
 
             csoundCreate = linker.downcallHandle(mylib.find("csoundCreate").orElseThrow(),
                     FunctionDescriptor.of(ADDRESS, ADDRESS));
+            csoundGetVersion = linker.downcallHandle(mylib.find("csoundGetVersion").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_INT));
+            csoundSetOption = linker.downcallHandle(mylib.find("csoundSetOption").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
+            csoundEvalCode = linker.downcallHandle(mylib.find("csoundEvalCode").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS, ADDRESS));
+
+            csoundCompileOrc = linker.downcallHandle(mylib.find("csoundCompileOrc").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
+            csoundCompileOrcAsync = linker.downcallHandle(mylib.find("csoundCompileOrcAsync").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
+            csoundCompileCsdText = linker.downcallHandle(mylib.find("csoundCompileCsdText").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
+            csoundGetScoreTime = linker.downcallHandle(mylib.find("csoundGetScoreTime").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS));
+            csoundInputMessage = linker.downcallHandle(mylib.find("csoundInputMessage").orElseThrow(),
+                    FunctionDescriptor.ofVoid(ADDRESS, ADDRESS));
+            csoundInputMessageAsync = linker.downcallHandle(mylib.find("csoundInputMessageAsync").orElseThrow(),
+                    FunctionDescriptor.ofVoid(ADDRESS, ADDRESS));
+            csoundReadScore = linker.downcallHandle(mylib.find("csoundReadScore").orElseThrow(),
+                    FunctionDescriptor.ofVoid(ADDRESS, ADDRESS));
+            csoundReadScoreAsync = linker.downcallHandle(mylib.find("csoundReadScoreAsync").orElseThrow(),
+                    FunctionDescriptor.ofVoid(ADDRESS, ADDRESS));
+            csoundPerformKsmps = linker.downcallHandle(mylib.find("csoundPerformKsmps").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_INT, ADDRESS));
+
+            csoundStart = linker.downcallHandle(mylib.find("csoundStart").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_INT, ADDRESS));
+            csoundStop = linker.downcallHandle(mylib.find("csoundStop").orElseThrow(),
+                    FunctionDescriptor.ofVoid(ADDRESS));
+
+            csoundGetSr = linker.downcallHandle(mylib.find("csoundGetSr").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS));
+            csoundGetKr = linker.downcallHandle(mylib.find("csoundGetKr").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS));
+            csoundGetKsmps = linker.downcallHandle(mylib.find("csoundGetKsmps").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_INT, ADDRESS));
+            csoundGetNchnls = linker.downcallHandle(mylib.find("csoundGetNchnls").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_INT, ADDRESS));
+            csoundGetNchnlsInput = linker.downcallHandle(mylib.find("csoundGetNchnlsInput").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_INT, ADDRESS));
+            csoundGet0dBFS = linker.downcallHandle(mylib.find("csoundGet0dBFS").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS));
 
         } catch (Throwable t) {
             t.printStackTrace();
         }
-
     }
-    
+
     static {
         initialize();
+    }
+
+    /**
+     * Returns the version number times 1000 (5.00.0 = 5000).
+     *
+     * @return version number
+     */
+    public static int getVersion() {
+        try {
+            int version = (int) csoundGetVersion.invoke();
+            return version;
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
     }
 
     public Csound() {
@@ -98,5 +182,591 @@ public class Csound {
         } catch (Throwable e) {
             e.printStackTrace();
         }
+    }
+
+    /**
+     * Set a single Csound option (flag). NB: blank spaces are not allowed
+     *
+     * @param option Single Csound option
+     * @return Returns a non-zero error code on failure.
+     */
+    public int setOption(String option) {
+        try (Arena arena = Arena.ofConfined()) {
+            // Convert Java string to a C-style string
+            byte[] optionBytes = (option + "\0").getBytes(StandardCharsets.UTF_8);
+            MemorySegment optionSegment = arena.allocate(optionBytes.length);
+            optionSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+
+            // Invoke the native function
+            return (int) csoundSetOption.invoke(csoundInstance, optionSegment);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
+    }
+
+    /**
+     * Parse and compile an orchestra given on an string, evaluating any global
+     * space code (i-time only).On SUCCESS it returns a value passed to the
+     * 'return' opcode in global space
+     *
+     * <pre>
+     * String code = "i1 = 2 + 2 \n return i1 \n";
+     * double retval = csound.evalCode(code);
+     * </pre>
+     *
+     * @param orcCode Csound orchestra code to evaluate
+     * @return result of value passed to 'return' opcode in global space
+     */
+    public double evalCode(String orcCode) {
+
+        try (Arena arena = Arena.ofConfined()) {
+            // Convert Java string to a C-style string
+            byte[] optionBytes = (orcCode + "\0").getBytes(StandardCharsets.UTF_8);
+            MemorySegment orcCodeSegment = arena.allocate(optionBytes.length);
+            orcCodeSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+
+            // Invoke the native function
+            return (double) csoundEvalCode.invoke(csoundInstance, orcCodeSegment);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
+    }
+
+    /**
+     * Compiles Csound input files (such as an orchestra and score, or CSD) as
+     * directed by the supplied command-line arguments, but does not perform
+     * them. Returns a non-zero error code on failure.This function cannot be
+     * called during performance, and before a repeated call, reset() needs to
+     * be called. In this (host-driven) mode, the sequence of calls should be as
+     * follows:
+     *
+     * <pre>
+     * csound.compile(args);
+     * while (csound.performKsmps() == 0)
+     *     ;
+     * csound.cleanup();
+     * csound.reset();
+     * </pre>
+     *
+     * Calls csoundStart() internally. Can only be called again after reset (see
+     * csoundReset())
+     *
+     * @param args String arguments as if using command-line Csound. First
+     *             argument should be the name of the command (e.g., "csound").
+     * @return Returns a non-zero error code on failure.
+     */
+    public int compile(String[] args) {
+        throw new UnsupportedOperationException("Not yet implemented.");
+        // return csoundCompile(csoundPtr, args);
+    }
+
+    /**
+     * Parse, and compile the given orchestra from a String, also evaluating any
+     * global space code (i-time only) this can be called during performance to
+     * compile a new orchestra.
+     *
+     * <pre>
+     * String orc = "instr 1 \n a1 rand 0dbfs/4 \n out a1 \n";
+     * csound.compileOrc(csound, orc);
+     * </pre>
+     *
+     * @param orc Csound orchestra code
+     * @return Returns a non-zero error code on failure.
+     */
+    public int compileOrc(String orcCode) {
+        try (Arena arena = Arena.ofConfined()) {
+            // Convert Java string to a C-style string
+            byte[] optionBytes = (orcCode + "\0").getBytes(StandardCharsets.UTF_8);
+            MemorySegment orcCodeSegment = arena.allocate(optionBytes.length);
+            orcCodeSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+
+            // Invoke the native function
+            return (int) csoundCompileOrc.invoke(csoundInstance, orcCodeSegment);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
+    }
+
+    /**
+     * Async version of compileOrc().The code is parsed and compiled, then
+     * placed on a queue for asynchronous merge into the running engine, and
+     * evaluation.The function returns following parsing and compilation.
+     *
+     * @param orc Csound orchestra code
+     * @return Returns a non-zero error code on failure.
+     */
+    public int compileOrcAsync(String orcCode) {
+        try (Arena arena = Arena.ofConfined()) {
+            // Convert Java string to a C-style string
+            byte[] optionBytes = (orcCode + "\0").getBytes(StandardCharsets.UTF_8);
+            MemorySegment orcCodeSegment = arena.allocate(optionBytes.length);
+            orcCodeSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+
+            // Invoke the native function
+            return (int) csoundCompileOrcAsync.invoke(csoundInstance, orcCodeSegment);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
+    }
+
+    /**
+     * Compiles Csound CSD input text, but does not perform it.Returns a
+     * non-zero error code on failure.If start() is called before
+     * compileCsdText(), the &lt;CsOptions&gt; element is ignored (but
+     * csoundSetOption can be called any number of times), the &lt;CsScore&gt;
+     * element is not pre-processed, but dispatched as real-time events; and
+     * performance continues indefinitely, or until ended by calling csoundStop
+     * or some other logic. In this "real-time" mode, the sequence of calls
+     * should be:
+     *
+     * <pre>
+     *
+     * csound.setOption("-an_option");
+     * csound.setOption("-another_option");
+     * csound.start(csound);
+     * csound.sompileCsdText(csound, csdText);
+     * while (1) {
+     *     csound.performKsmps(csound);
+     *     // Something to break out of the loop
+     *     // when finished here...
+     * }
+     * csound.cleanup(csound);
+     * csound.reset(csound);
+     *
+     * </pre>
+     *
+     * NB: this function can be called repeatedly during performance to replace
+     * or add new instruments and events.
+     *
+     * But if csoundCompileCsd is called before csoundStart, the
+     * &lt;CsOptions&gt; element is used, the &lt;CsScore&gt; section is
+     * pre-processed and dispatched normally, and performance terminates when
+     * the score terminates, or stop() is called. In this "non-real-time" mode
+     * (which can still output real-time audio and handle real-time events), the
+     * sequence of calls should be:
+     *
+     * <pre>
+     *
+     * csound.compileCsdText(csound, csdText);
+     * csound.start();
+     * while (1) {
+     *     int finished = csound.performKsmps(csound);
+     *     if (finished)
+     *         break;
+     * }
+     * csound.cleanup();
+     * csound.reset();
+     *
+     * </pre>
+     *
+     * @param csdText Csound CSD text
+     * @return Returns a non-zero error code on failure.
+     */
+    public int compileCsdText(String csdText) {
+        try (Arena arena = Arena.ofConfined()) {
+            // Convert Java string to a C-style string
+            byte[] optionBytes = (csdText + "\0").getBytes(StandardCharsets.UTF_8);
+            MemorySegment csdTextSegment = arena.allocate(optionBytes.length);
+            csdTextSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+
+            // Invoke the native function
+            return (int) csoundCompileCsdText.invoke(csoundInstance, csdTextSegment);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
+    }
+
+    /**
+     * Returns the current score time in seconds since the beginning of
+     * performance.
+     *
+     * @return Current score time in seconds since the beginning of performance.
+     */
+    public double getScoreTime() {
+        try {
+            return (double) csoundGetScoreTime.invokeExact(csoundInstance);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
+    }
+
+    /**
+     * Input a String (as if from a console), used for line events.
+     *
+     * @param scoreText Csound score text.
+     */
+    public void inputMessage(String scoreText) {
+        try (Arena arena = Arena.ofConfined()) {
+            // Convert Java string to a C-style string
+            byte[] optionBytes = (scoreText + "\0").getBytes(StandardCharsets.UTF_8);
+            MemorySegment scoreTextSegment = arena.allocate(optionBytes.length);
+            scoreTextSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+
+            // Invoke the native function
+            csoundInputMessage.invoke(csoundInstance, scoreTextSegment);
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
+    }
+
+    /**
+     * Asynchronous version of inputMessage().
+     *
+     * @param scoreText Csound score text.
+     */
+    public void inputMessageAsync(String scoreText) {
+        try (Arena arena = Arena.ofConfined()) {
+            // Convert Java string to a C-style string
+            byte[] optionBytes = (scoreText + "\0").getBytes(StandardCharsets.UTF_8);
+            MemorySegment scoreTextSegment = arena.allocate(optionBytes.length);
+            scoreTextSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+
+            // Invoke the native function
+            csoundInputMessageAsync.invoke(csoundInstance, scoreTextSegment);
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
+    }
+
+    /**
+     * Read, preprocess, and load a score from a String.It can be called
+     * repeatedly, with the new score events being added to the currently
+     * scheduled ones.
+     *
+     * @param scoreText Csound score text.
+     * @return Returns a non-zero error code on failure.
+     *
+     */
+    public int readScore(String scoreText) {
+        try (Arena arena = Arena.ofConfined()) {
+            // Convert Java string to a C-style string
+            byte[] optionBytes = (scoreText + "\0").getBytes(StandardCharsets.UTF_8);
+            MemorySegment scoreTextSegment = arena.allocate(optionBytes.length);
+            scoreTextSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+
+            // Invoke the native function
+            return (int)csoundReadScore.invoke(csoundInstance, scoreTextSegment);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
+    }
+
+    /**
+     * Asynchronous version of readScore().
+     *
+     * @param scoreText Csound score text.
+     */
+    public void readScoreAsync(String scoreText) {
+        try (Arena arena = Arena.ofConfined()) {
+            // Convert Java string to a C-style string
+            byte[] optionBytes = (scoreText + "\0").getBytes(StandardCharsets.UTF_8);
+            MemorySegment scoreTextSegment = arena.allocate(optionBytes.length);
+            scoreTextSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+
+            // Invoke the native function
+            csoundReadScoreAsync.invoke(csoundInstance, scoreTextSegment);
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
+    }
+
+    /**
+     * Prepares Csound for performance. Normally called after compiling a csd
+     * file or an orc file, in which case score preprocessing is performed and
+     * performance terminates when the score terminates.
+     *
+     * However, if called before compiling a csd file or an orc file, score
+     * preprocessing is not performed and "i" statements are dispatched as
+     * real-time events, the &lt;CsOptions&gt; tag is ignored, and performance
+     * continues indefinitely or until ended using the API.
+     */
+    public int start() {
+        try {
+            return (int)csoundStart.invokeExact(csoundInstance);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
+    }
+
+    /**
+     * Stops a perform() running (may be in another thread). Note that it is not
+     * guaranteed that perform() has already stopped when this function returns.
+     */
+    public void stop() {
+        try {
+            csoundStop.invokeExact(csoundInstance);
+        } catch (Throwable e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Senses input events, and performs one control sample worth (ksmps) of
+     * audio output. Note that compile() or compileOrc(), readScore(), start()
+     * must be called first. Returns 0 during performance, and 1 when
+     * performance is finished. If called until it returns 1, will perform an
+     * entire score. Enables external software to control the execution of
+     * Csound, and to synchronize performance with audio input and output.
+     *
+     * @return 1 if performance is done, 0 if still more to perform.
+     */
+    public int performKsmps() {
+        try {
+            return (int)csoundPerformKsmps.invokeExact(csoundInstance);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
+    }
+
+    /**
+     * Senses input events and performs audio output until the end of score is
+     * reached (positive return value), an error occurs (negative return value),
+     * or performance is stopped by calling csoundStop() from another thread
+     * (zero return value). Note that csoundCompile() or csoundCompileOrc(),
+     * csoundReadScore(), csoundStart() must be called first. In the case of
+     * zero return value, csoundPerform() can be called again to continue the
+     * stopped performance. Otherwise, csoundReset() should be called to clean
+     * up after the finished or failed performance.
+     */
+    public int perform() {
+        int res;
+        do {
+            res = performKsmps();
+        } while (res == 0);
+
+        return res;
+    }
+
+    /**
+     * Prints information about the end of a performance, and closes audio and
+     * MIDI devices.Note: after calling cleanup(), the operation of the perform
+     * functions is undefined.
+     *
+     * @return Returns a non-zero error code on failure.
+     *
+     */
+    public int cleanup() {
+        throw new UnsupportedOperationException("Not yet implemented.");
+        // return csoundCleanup(csoundPtr);
+    }
+
+    /**
+     * Resets all internal memory and state in preparation for a new
+     * performance. Enables external software to run successive Csound
+     * performances without reloading Csound. Implies cleanup(), unless already
+     * called.
+     */
+    public void reset() {
+        throw new UnsupportedOperationException("Not yet implemented.");
+        // csoundReset(csoundPtr);
+    }
+
+    /**
+     * Returns the number of audio sample frames per second.
+     *
+     * @return The number of audio sample frames per second.
+     */
+    public double getSr() {
+        try {
+            return (double) csoundGetSr.invokeExact(csoundInstance);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
+
+    }
+
+    /**
+     * Returns the number of control samples per second.
+     *
+     * @return The number of control samples per second.
+     */
+    public double getKr() {
+        try {
+            return (double) csoundGetKr.invokeExact(csoundInstance);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
+    }
+
+    /**
+     * Returns the number of audio sample frames per control sample.
+     *
+     * @return The number of audio sample frames per control sample.
+     */
+    public int getKsmps() {
+        try {
+            return (int) csoundGetKsmps.invokeExact(csoundInstance);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
+    }
+
+    /**
+     * Returns the number of audio output channels. Set through the nchnls
+     * header variable in the csd file.
+     *
+     * @return The number of audio output channels
+     */
+    public int getNchnls() {
+        try {
+            return (int) csoundGetNchnls.invokeExact(csoundInstance);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
+    }
+
+    /**
+     * Returns the number of audio input channels. Set through the nchnls_i
+     * header variable in the csd file. If this variable is not set, the value
+     * is taken from nchnls.
+     *
+     * @return The number of audio input channels
+     */
+    public int getNchnlsInput() {
+        try {
+            return (int) csoundGetNchnlsInput.invokeExact(csoundInstance);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
+    }
+
+    /**
+     * Returns the 0dBFS level of the spin/spout buffers.
+     *
+     * @return The 0dBFS level of the spin/spout buffers.
+     */
+    public double get0dBFS() {
+        try {
+            return (double) csoundGet0dBFS.invokeExact(csoundInstance);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
+    }
+
+    /**
+     * Returns a DoubleBuffer wrapper of the Csound audio input working buffer
+     * (spin).Enables external software to write audio into Csound before
+     * calling csoundPerformKsmps. The length of the DoubleBuffer is set to
+     * ksmps * nchnls_i.
+     *
+     * @return DoubleBuffer wrapper of the Csound audio input working buffer
+     *         (spin).
+     */
+    public DoubleBuffer getSpin() {
+        throw new UnsupportedOperationException("Not yet implemented.");
+        // ByteBuffer buffer = csoundGetSpin(csoundPtr);
+        // DoubleBuffer retVal = null;
+
+        // if (buffer != null) {
+        // buffer.order(ByteOrder.nativeOrder());
+        // retVal = buffer.asDoubleBuffer();
+        // }
+        // return retVal;
+    }
+
+    /**
+     * Returns a DoubleBuffer wrapper of the Csound audio output working buffer
+     * (spout). Enables external software to read audio from Csound after
+     * calling csoundPerformKsmps. The length of the DoubleBuffer is set to
+     * ksmps * nchnls.
+     *
+     * @return DoubleBuffer wrapper of the Csound audio output working buffer
+     *         (spout).
+     */
+    public DoubleBuffer getSpout() {
+
+        throw new UnsupportedOperationException("Not yet implemented.");
+        // ByteBuffer buffer = csoundGetSpout(csoundPtr);
+        // DoubleBuffer retVal = null;
+
+        // if (buffer != null) {
+        // buffer.order(ByteOrder.nativeOrder());
+        // retVal = buffer.asDoubleBuffer();
+        // }
+        // return retVal;
+    }
+
+    /**
+     * Sets the value of control channel identified by name.
+     *
+     *
+     * @param name  Name of channel.
+     * @param value Value to set.
+     */
+    public void setChannel(String name, double value) {
+        throw new UnsupportedOperationException("Not yet implemented.");
+        // csoundSetControlChannel(csoundPtr, name, value);
+    }
+
+    /**
+     * Sets the string channel identified by channelName with channelValue.
+     *
+     * @param channelName  Name of channel.
+     * @param channelValue Value to set.
+     */
+    public void setStringChannel(String channelName, String channelValue) {
+        throw new UnsupportedOperationException("Not yet implemented.");
+        // csoundSetStringChannel(csoundPtr, channelName, channelValue);
+    }
+
+    /**
+     * Sets a MessageCallback to be called by Csound to print an informational
+     * message.This callback is never called in --realtime mode.
+     *
+     * @param msgCallback Callback to execute to print messages.
+     */
+    public void setMessageCallback(MessageCallback msgCallback) {
+        throw new UnsupportedOperationException("Not yet implemented.");
+        // csoundSetMessageCallback(csoundPtr, msgCallback);
+        // this.messageCallback = msgCallback;
+    }
+
+    /**
+     * Returns a DoubleBuffer that wraps the data pointer for a control channel.
+     * Allows efficient reading and writing of the channel as it does not have
+     * to look up the channel each time as it does with setChannel().
+     *
+     * @param name Name of control channel
+     * @return DoubleBuffer that wraps control channel data pointer.
+     */
+    public DoubleBuffer getControlChannelPtr(String name) {
+        throw new UnsupportedOperationException("Not yet implemented.");
+        // ByteBuffer buffer = csoundGetChannelPtr(csoundPtr, name,
+        // CSOUND_CONTROL_CHANNEL | CSOUND_INPUT_CHANNEL | CSOUND_OUTPUT_CHANNEL);
+        // DoubleBuffer retVal = null;
+
+        // if (buffer != null) {
+        // buffer.order(ByteOrder.nativeOrder());
+        // retVal = buffer.asDoubleBuffer();
+        // }
+        // return retVal;
+    }
+
+    public DoubleBuffer getAudioChannelPtr(String name) {
+        throw new UnsupportedOperationException("Not yet implemented.");
+        // ByteBuffer buffer = csoundGetChannelPtr(csoundPtr, name,
+        // CSOUND_AUDIO_CHANNEL | CSOUND_INPUT_CHANNEL | CSOUND_OUTPUT_CHANNEL);
+
+        // DoubleBuffer retVal = null;
+        // if (buffer != null) {
+        // buffer.order(ByteOrder.nativeOrder());
+        // retVal = buffer.asDoubleBuffer();
+        // }
+        // return retVal;
     }
 }

@@ -34,6 +34,7 @@ import static java.lang.foreign.ValueLayout.JAVA_DOUBLE;
 import static java.lang.foreign.ValueLayout.JAVA_INT;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.ref.Cleaner;
 import java.nio.DoubleBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -49,6 +50,7 @@ public class Csound {
     private static MethodHandle csoundGetVersion = null;
     private static MethodHandle csoundSetOption = null;
     private static MethodHandle csoundEvalCode = null;
+    private static MethodHandle csoundCompile = null;
     private static MethodHandle csoundCompileOrc = null;
     private static MethodHandle csoundCompileOrcAsync = null;
     private static MethodHandle csoundCompileCsdText = null;
@@ -61,6 +63,9 @@ public class Csound {
 
     private static MethodHandle csoundStart = null;
     private static MethodHandle csoundStop = null;
+    private static MethodHandle csoundCleanup = null;
+    private static MethodHandle csoundReset = null;
+    private static MethodHandle csoundDestroy = null;
 
     private static MethodHandle csoundGetSr;
     private static MethodHandle csoundGetKr;
@@ -68,6 +73,12 @@ public class Csound {
     private static MethodHandle csoundGetNchnls;
     private static MethodHandle csoundGetNchnlsInput;
     private static MethodHandle csoundGet0dBFS;
+
+    private static final Cleaner cleaner = Cleaner.create();
+
+    // MEMBER VARIABLES
+    @SuppressWarnings("unused")
+    private final Cleaner.Cleanable cleanable;
 
     private MemorySegment csoundInstance;
 
@@ -113,7 +124,8 @@ public class Csound {
                     FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
             csoundEvalCode = linker.downcallHandle(mylib.find("csoundEvalCode").orElseThrow(),
                     FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS, ADDRESS));
-
+            csoundCompile = linker.downcallHandle(mylib.find("csoundCompile").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, ADDRESS));
             csoundCompileOrc = linker.downcallHandle(mylib.find("csoundCompileOrc").orElseThrow(),
                     FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
             csoundCompileOrcAsync = linker.downcallHandle(mylib.find("csoundCompileOrcAsync").orElseThrow(),
@@ -136,6 +148,12 @@ public class Csound {
             csoundStart = linker.downcallHandle(mylib.find("csoundStart").orElseThrow(),
                     FunctionDescriptor.of(JAVA_INT, ADDRESS));
             csoundStop = linker.downcallHandle(mylib.find("csoundStop").orElseThrow(),
+                    FunctionDescriptor.ofVoid(ADDRESS));
+            csoundCleanup = linker.downcallHandle(mylib.find("csoundCleanup").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_INT, ADDRESS));
+            csoundReset = linker.downcallHandle(mylib.find("csoundReset").orElseThrow(),
+                    FunctionDescriptor.ofVoid(ADDRESS));
+            csoundDestroy = linker.downcallHandle(mylib.find("csoundDestroy").orElseThrow(),
                     FunctionDescriptor.ofVoid(ADDRESS));
 
             csoundGetSr = linker.downcallHandle(mylib.find("csoundGetSr").orElseThrow(),
@@ -179,8 +197,10 @@ public class Csound {
         try (Arena arena = Arena.ofConfined()) {
             var arg = arena.allocate(ADDRESS);
             csoundInstance = (MemorySegment) csoundCreate.invokeExact(arg);
+            cleanable = cleaner.register(this, new CsoundCleanup(csoundInstance));
         } catch (Throwable e) {
             e.printStackTrace();
+            throw new RuntimeException(e);
         }
     }
 
@@ -258,8 +278,24 @@ public class Csound {
      * @return Returns a non-zero error code on failure.
      */
     public int compile(String[] args) {
-        throw new UnsupportedOperationException("Not yet implemented.");
-        // return csoundCompile(csoundPtr, args);
+        try (Arena arena = Arena.ofConfined()) {
+            // Allocate memory for the array of pointers
+            MemorySegment argsArray = arena.allocate(ADDRESS, args.length);
+
+            // Allocate memory for each string and set the pointers
+            for (int i = 0; i < args.length; i++) {
+                byte[] argBytes = (args[i] + "\0").getBytes(StandardCharsets.UTF_8);
+                MemorySegment argSegment = arena.allocate(argBytes.length);
+                argSegment.copyFrom(MemorySegment.ofArray(argBytes));
+                argsArray.setAtIndex(ADDRESS, i, argSegment);
+            }
+
+            // Invoke the native function
+            return (int) csoundCompile.invoke(csoundInstance, args.length, argsArray);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
     }
 
     /**
@@ -451,7 +487,7 @@ public class Csound {
             scoreTextSegment.copyFrom(MemorySegment.ofArray(optionBytes));
 
             // Invoke the native function
-            return (int)csoundReadScore.invoke(csoundInstance, scoreTextSegment);
+            return (int) csoundReadScore.invoke(csoundInstance, scoreTextSegment);
         } catch (Throwable t) {
             t.printStackTrace();
             return -1;
@@ -489,7 +525,7 @@ public class Csound {
      */
     public int start() {
         try {
-            return (int)csoundStart.invokeExact(csoundInstance);
+            return (int) csoundStart.invokeExact(csoundInstance);
         } catch (Throwable t) {
             t.printStackTrace();
             return -1;
@@ -520,7 +556,7 @@ public class Csound {
      */
     public int performKsmps() {
         try {
-            return (int)csoundPerformKsmps.invokeExact(csoundInstance);
+            return (int) csoundPerformKsmps.invokeExact(csoundInstance);
         } catch (Throwable t) {
             t.printStackTrace();
             return -1;
@@ -555,8 +591,12 @@ public class Csound {
      *
      */
     public int cleanup() {
-        throw new UnsupportedOperationException("Not yet implemented.");
-        // return csoundCleanup(csoundPtr);
+        try {
+            return (int) csoundCleanup.invokeExact(csoundInstance);
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return -1;
+        }
     }
 
     /**
@@ -566,8 +606,11 @@ public class Csound {
      * called.
      */
     public void reset() {
-        throw new UnsupportedOperationException("Not yet implemented.");
-        // csoundReset(csoundPtr);
+        try {
+            csoundReset.invokeExact(csoundInstance);
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
     }
 
     /**
@@ -667,7 +710,7 @@ public class Csound {
      * @return DoubleBuffer wrapper of the Csound audio input working buffer
      *         (spin).
      */
-    public DoubleBuffer getSpin() {
+    public MemorySegment getSpin() {
         throw new UnsupportedOperationException("Not yet implemented.");
         // ByteBuffer buffer = csoundGetSpin(csoundPtr);
         // DoubleBuffer retVal = null;
@@ -768,5 +811,22 @@ public class Csound {
         // retVal = buffer.asDoubleBuffer();
         // }
         // return retVal;
+    }
+
+    private static class CsoundCleanup implements Runnable {
+        private final MemorySegment csoundInstance;
+
+        CsoundCleanup(MemorySegment csoundInstance) {
+            this.csoundInstance = csoundInstance;
+        }
+
+        @Override
+        public void run() {
+            try {
+                csoundDestroy.invokeExact(csoundInstance);
+            } catch (Throwable e) {
+                e.printStackTrace();
+            }
+        }
     }
 }

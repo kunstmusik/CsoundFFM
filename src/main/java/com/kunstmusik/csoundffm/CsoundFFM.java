@@ -28,7 +28,14 @@ package com.kunstmusik.csoundffm;
  */
 public class CsoundFFM {
 
-    public static void main(String[] args) {
+    private static void testCompile() {
+        Csound csound = new Csound();
+        csound.compile(new String[]{"csound", "-odac", "-d", "trapped.csd"});
+        csound.perform();
+        csound.reset();
+    }
+
+    private static void test1() {
         System.out.println(String.format("Csound Version: %d", Csound.getVersion()));
         Csound csound = new Csound();
 
@@ -53,7 +60,7 @@ public class CsoundFFM {
            <CsoundSynthesizer> 
            <CsInstruments>
             instr 1
-                a1 = oscil(0.5, 440)
+                a1 = oscil(0.25, 440)
                 outs a1, a1
             endin
             
@@ -71,7 +78,7 @@ public class CsoundFFM {
                 outs a1, a1
             endin
             
-            schedule(2, 0, 4)
+            // schedule(2, 0, 4)
         """);
 
         csound.start();
@@ -79,5 +86,12 @@ public class CsoundFFM {
         while(csound.performKsmps() == 0);
 
         csound.stop();
+        csound.cleanup();
+        csound.reset();
+    }
+
+    public static void main(String[] args) {
+        // testCompile();
+        test1();
     }
 }

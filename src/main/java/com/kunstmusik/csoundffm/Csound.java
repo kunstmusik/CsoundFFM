@@ -22,6 +22,13 @@
  */
 package com.kunstmusik.csoundffm;
 
+import static com.kunstmusik.csoundffm.ControlChannelType.CSOUND_CONTROL_CHANNEL;
+import static com.kunstmusik.csoundffm.ControlChannelType.CSOUND_INPUT_CHANNEL;
+import static com.kunstmusik.csoundffm.ControlChannelType.CSOUND_OUTPUT_CHANNEL;
+import static java.lang.foreign.ValueLayout.ADDRESS;
+import static java.lang.foreign.ValueLayout.JAVA_DOUBLE;
+import static java.lang.foreign.ValueLayout.JAVA_INT;
+
 import java.io.File;
 import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
@@ -29,13 +36,8 @@ import java.lang.foreign.Linker;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
-import static java.lang.foreign.ValueLayout.ADDRESS;
-import static java.lang.foreign.ValueLayout.JAVA_DOUBLE;
-import static java.lang.foreign.ValueLayout.JAVA_INT;
-
 import java.lang.invoke.MethodHandle;
 import java.lang.ref.Cleaner;
-import java.nio.DoubleBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 
@@ -73,6 +75,10 @@ public class Csound {
     private static MethodHandle csoundGetNchnls;
     private static MethodHandle csoundGetNchnlsInput;
     private static MethodHandle csoundGet0dBFS;
+
+    private static MethodHandle csoundSetControlChannel;
+    private static MethodHandle csoundSetStringChannel;
+    private static MethodHandle csoundGetChannelPtr;
 
     private static final Cleaner cleaner = Cleaner.create();
 
@@ -168,6 +174,13 @@ public class Csound {
                     FunctionDescriptor.of(JAVA_INT, ADDRESS));
             csoundGet0dBFS = linker.downcallHandle(mylib.find("csoundGet0dBFS").orElseThrow(),
                     FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS));
+
+            csoundSetControlChannel = linker.downcallHandle(mylib.find("csoundSetControlChannel").orElseThrow(),
+                    FunctionDescriptor.ofVoid(ADDRESS, ADDRESS, JAVA_DOUBLE));
+            csoundSetStringChannel = linker.downcallHandle(mylib.find("csoundSetStringChannel").orElseThrow(),
+                    FunctionDescriptor.ofVoid(ADDRESS, ADDRESS, ADDRESS));
+            csoundGetChannelPtr = linker.downcallHandle(mylib.find("csoundGetChannelPtr").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, ADDRESS, JAVA_INT));
 
         } catch (Throwable t) {
             t.printStackTrace();
@@ -723,15 +736,14 @@ public class Csound {
     }
 
     /**
-     * Returns a DoubleBuffer wrapper of the Csound audio output working buffer
+     * Returns a MemorySegment of the Csound audio output working buffer
      * (spout). Enables external software to read audio from Csound after
-     * calling csoundPerformKsmps. The length of the DoubleBuffer is set to
+     * calling csoundPerformKsmps. The length of the MemorySegment is set to
      * ksmps * nchnls.
      *
-     * @return DoubleBuffer wrapper of the Csound audio output working buffer
-     *         (spout).
+     * @return MemorySegment of the Csound audio output working buffer (spout).
      */
-    public DoubleBuffer getSpout() {
+    public MemorySegment getSpout() {
 
         throw new UnsupportedOperationException("Not yet implemented.");
         // ByteBuffer buffer = csoundGetSpout(csoundPtr);
@@ -748,12 +760,21 @@ public class Csound {
      * Sets the value of control channel identified by name.
      *
      *
-     * @param name  Name of channel.
-     * @param value Value to set.
+     * @param channelName Name of channel.
+     * @param value       Value to set.
      */
-    public void setChannel(String name, double value) {
-        throw new UnsupportedOperationException("Not yet implemented.");
-        // csoundSetControlChannel(csoundPtr, name, value);
+    public void setChannel(String channelName, double value) {
+        try (Arena arena = Arena.ofConfined()) {
+            // Convert Java string to a C-style string
+            byte[] nameBytes = (channelName + "\0").getBytes(StandardCharsets.UTF_8);
+            MemorySegment nameSegment = arena.allocate(nameBytes.length);
+            nameSegment.copyFrom(MemorySegment.ofArray(nameBytes));
+
+            // Invoke the native function
+            csoundSetControlChannel.invoke(csoundInstance, nameSegment, value);
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
     }
 
     /**
@@ -763,8 +784,21 @@ public class Csound {
      * @param channelValue Value to set.
      */
     public void setStringChannel(String channelName, String channelValue) {
-        throw new UnsupportedOperationException("Not yet implemented.");
-        // csoundSetStringChannel(csoundPtr, channelName, channelValue);
+        try (Arena arena = Arena.ofConfined()) {
+            // Convert Java string to a C-style string
+            byte[] nameBytes = (channelName + "\0").getBytes(StandardCharsets.UTF_8);
+            MemorySegment nameSegment = arena.allocate(nameBytes.length);
+            nameSegment.copyFrom(MemorySegment.ofArray(nameBytes));
+
+            byte[] valueBytes = (channelValue + "\0").getBytes(StandardCharsets.UTF_8);
+            MemorySegment valueSegment = arena.allocate(valueBytes.length);
+            valueSegment.copyFrom(MemorySegment.ofArray(valueBytes));
+
+            // Invoke the native function
+            csoundSetStringChannel.invoke(csoundInstance, nameSegment, valueSegment);
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
     }
 
     /**
@@ -780,27 +814,40 @@ public class Csound {
     }
 
     /**
-     * Returns a DoubleBuffer that wraps the data pointer for a control channel.
-     * Allows efficient reading and writing of the channel as it does not have
-     * to look up the channel each time as it does with setChannel().
+     * Returns a MemorySegment for a control channel. Allows efficient reading
+     * and writing of the channel as it does not have to look up the channel
+     * each time as it does with setChannel().
      *
      * @param name Name of control channel
-     * @return DoubleBuffer that wraps control channel data pointer.
+     * @return MemorySegment for control channel data pointer.
      */
-    public DoubleBuffer getControlChannelPtr(String name) {
-        throw new UnsupportedOperationException("Not yet implemented.");
-        // ByteBuffer buffer = csoundGetChannelPtr(csoundPtr, name,
-        // CSOUND_CONTROL_CHANNEL | CSOUND_INPUT_CHANNEL | CSOUND_OUTPUT_CHANNEL);
-        // DoubleBuffer retVal = null;
+    public MemorySegment getControlChannelPtr(String channelName) {
 
-        // if (buffer != null) {
-        // buffer.order(ByteOrder.nativeOrder());
-        // retVal = buffer.asDoubleBuffer();
-        // }
-        // return retVal;
+        var global = Arena.global();
+
+        try (Arena arena = Arena.ofConfined()) {
+            // Convert Java string to a C-style string
+            byte[] nameBytes = (channelName + "\0").getBytes(StandardCharsets.UTF_8);
+            MemorySegment nameSegment = arena.allocate(nameBytes.length);
+            nameSegment.copyFrom(MemorySegment.ofArray(nameBytes));
+
+            MemorySegment channelPtrPtr = arena.allocate(ADDRESS);
+
+            int retVal = (int) csoundGetChannelPtr.invoke(csoundInstance, channelPtrPtr, nameSegment,
+                    CSOUND_CONTROL_CHANNEL | CSOUND_INPUT_CHANNEL | CSOUND_OUTPUT_CHANNEL);
+
+            // TODO - check retval, see ctcsound.py for example
+            MemorySegment channelPtr = channelPtrPtr.get(ADDRESS, 0);
+            channelPtr = channelPtr.reinterpret(JAVA_DOUBLE.byteSize());
+
+            return channelPtr;
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return null;
+        }
     }
 
-    public DoubleBuffer getAudioChannelPtr(String name) {
+    public MemorySegment getAudioChannelPtr(String name) {
         throw new UnsupportedOperationException("Not yet implemented.");
         // ByteBuffer buffer = csoundGetChannelPtr(csoundPtr, name,
         // CSOUND_AUDIO_CHANNEL | CSOUND_INPUT_CHANNEL | CSOUND_OUTPUT_CHANNEL);
@@ -814,6 +861,7 @@ public class Csound {
     }
 
     private static class CsoundCleanup implements Runnable {
+
         private final MemorySegment csoundInstance;
 
         CsoundCleanup(MemorySegment csoundInstance) {

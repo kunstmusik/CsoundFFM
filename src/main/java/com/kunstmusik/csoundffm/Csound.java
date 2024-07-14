@@ -225,12 +225,8 @@ public class Csound {
      */
     public int setOption(String option) {
         try (Arena arena = Arena.ofConfined()) {
-            // Convert Java string to a C-style string
-            byte[] optionBytes = (option + "\0").getBytes(StandardCharsets.UTF_8);
-            MemorySegment optionSegment = arena.allocate(optionBytes.length);
-            optionSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+            MemorySegment optionSegment = arena.allocateFrom(option);
 
-            // Invoke the native function
             return (int) csoundSetOption.invoke(csoundInstance, optionSegment);
         } catch (Throwable t) {
             t.printStackTrace();
@@ -254,12 +250,8 @@ public class Csound {
     public double evalCode(String orcCode) {
 
         try (Arena arena = Arena.ofConfined()) {
-            // Convert Java string to a C-style string
-            byte[] optionBytes = (orcCode + "\0").getBytes(StandardCharsets.UTF_8);
-            MemorySegment orcCodeSegment = arena.allocate(optionBytes.length);
-            orcCodeSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+            MemorySegment orcCodeSegment = arena.allocateFrom(orcCode);
 
-            // Invoke the native function
             return (double) csoundEvalCode.invoke(csoundInstance, orcCodeSegment);
         } catch (Throwable t) {
             t.printStackTrace();
@@ -297,9 +289,7 @@ public class Csound {
 
             // Allocate memory for each string and set the pointers
             for (int i = 0; i < args.length; i++) {
-                byte[] argBytes = (args[i] + "\0").getBytes(StandardCharsets.UTF_8);
-                MemorySegment argSegment = arena.allocate(argBytes.length);
-                argSegment.copyFrom(MemorySegment.ofArray(argBytes));
+                MemorySegment argSegment = arena.allocateFrom(args[i]);
                 argsArray.setAtIndex(ADDRESS, i, argSegment);
             }
 
@@ -326,12 +316,8 @@ public class Csound {
      */
     public int compileOrc(String orcCode) {
         try (Arena arena = Arena.ofConfined()) {
-            // Convert Java string to a C-style string
-            byte[] optionBytes = (orcCode + "\0").getBytes(StandardCharsets.UTF_8);
-            MemorySegment orcCodeSegment = arena.allocate(optionBytes.length);
-            orcCodeSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+            MemorySegment orcCodeSegment = arena.allocateFrom(orcCode);
 
-            // Invoke the native function
             return (int) csoundCompileOrc.invoke(csoundInstance, orcCodeSegment);
         } catch (Throwable t) {
             t.printStackTrace();
@@ -349,12 +335,8 @@ public class Csound {
      */
     public int compileOrcAsync(String orcCode) {
         try (Arena arena = Arena.ofConfined()) {
-            // Convert Java string to a C-style string
-            byte[] optionBytes = (orcCode + "\0").getBytes(StandardCharsets.UTF_8);
-            MemorySegment orcCodeSegment = arena.allocate(optionBytes.length);
-            orcCodeSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+            MemorySegment orcCodeSegment = arena.allocateFrom(orcCode);
 
-            // Invoke the native function
             return (int) csoundCompileOrcAsync.invoke(csoundInstance, orcCodeSegment);
         } catch (Throwable t) {
             t.printStackTrace();
@@ -417,12 +399,8 @@ public class Csound {
      */
     public int compileCsdText(String csdText) {
         try (Arena arena = Arena.ofConfined()) {
-            // Convert Java string to a C-style string
-            byte[] optionBytes = (csdText + "\0").getBytes(StandardCharsets.UTF_8);
-            MemorySegment csdTextSegment = arena.allocate(optionBytes.length);
-            csdTextSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+            MemorySegment csdTextSegment = arena.allocateFrom(csdText);
 
-            // Invoke the native function
             return (int) csoundCompileCsdText.invoke(csoundInstance, csdTextSegment);
         } catch (Throwable t) {
             t.printStackTrace();
@@ -452,12 +430,8 @@ public class Csound {
      */
     public void inputMessage(String scoreText) {
         try (Arena arena = Arena.ofConfined()) {
-            // Convert Java string to a C-style string
-            byte[] optionBytes = (scoreText + "\0").getBytes(StandardCharsets.UTF_8);
-            MemorySegment scoreTextSegment = arena.allocate(optionBytes.length);
-            scoreTextSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+            MemorySegment scoreTextSegment = arena.allocateFrom(scoreText);
 
-            // Invoke the native function
             csoundInputMessage.invoke(csoundInstance, scoreTextSegment);
         } catch (Throwable t) {
             t.printStackTrace();
@@ -471,12 +445,8 @@ public class Csound {
      */
     public void inputMessageAsync(String scoreText) {
         try (Arena arena = Arena.ofConfined()) {
-            // Convert Java string to a C-style string
-            byte[] optionBytes = (scoreText + "\0").getBytes(StandardCharsets.UTF_8);
-            MemorySegment scoreTextSegment = arena.allocate(optionBytes.length);
-            scoreTextSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+            MemorySegment scoreTextSegment = arena.allocateFrom(scoreText);
 
-            // Invoke the native function
             csoundInputMessageAsync.invoke(csoundInstance, scoreTextSegment);
         } catch (Throwable t) {
             t.printStackTrace();
@@ -494,12 +464,8 @@ public class Csound {
      */
     public int readScore(String scoreText) {
         try (Arena arena = Arena.ofConfined()) {
-            // Convert Java string to a C-style string
-            byte[] optionBytes = (scoreText + "\0").getBytes(StandardCharsets.UTF_8);
-            MemorySegment scoreTextSegment = arena.allocate(optionBytes.length);
-            scoreTextSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+            MemorySegment scoreTextSegment = arena.allocateFrom(scoreText);
 
-            // Invoke the native function
             return (int) csoundReadScore.invoke(csoundInstance, scoreTextSegment);
         } catch (Throwable t) {
             t.printStackTrace();
@@ -514,12 +480,8 @@ public class Csound {
      */
     public void readScoreAsync(String scoreText) {
         try (Arena arena = Arena.ofConfined()) {
-            // Convert Java string to a C-style string
-            byte[] optionBytes = (scoreText + "\0").getBytes(StandardCharsets.UTF_8);
-            MemorySegment scoreTextSegment = arena.allocate(optionBytes.length);
-            scoreTextSegment.copyFrom(MemorySegment.ofArray(optionBytes));
+            MemorySegment scoreTextSegment = arena.allocateFrom(scoreText);
 
-            // Invoke the native function
             csoundReadScoreAsync.invoke(csoundInstance, scoreTextSegment);
         } catch (Throwable t) {
             t.printStackTrace();
@@ -765,12 +727,8 @@ public class Csound {
      */
     public void setChannel(String channelName, double value) {
         try (Arena arena = Arena.ofConfined()) {
-            // Convert Java string to a C-style string
-            byte[] nameBytes = (channelName + "\0").getBytes(StandardCharsets.UTF_8);
-            MemorySegment nameSegment = arena.allocate(nameBytes.length);
-            nameSegment.copyFrom(MemorySegment.ofArray(nameBytes));
+            MemorySegment nameSegment = arena.allocateFrom(channelName);
 
-            // Invoke the native function
             csoundSetControlChannel.invoke(csoundInstance, nameSegment, value);
         } catch (Throwable t) {
             t.printStackTrace();
@@ -785,16 +743,9 @@ public class Csound {
      */
     public void setStringChannel(String channelName, String channelValue) {
         try (Arena arena = Arena.ofConfined()) {
-            // Convert Java string to a C-style string
-            byte[] nameBytes = (channelName + "\0").getBytes(StandardCharsets.UTF_8);
-            MemorySegment nameSegment = arena.allocate(nameBytes.length);
-            nameSegment.copyFrom(MemorySegment.ofArray(nameBytes));
+            MemorySegment nameSegment = arena.allocateFrom(channelName);
+            MemorySegment valueSegment = arena.allocateFrom(channelValue);
 
-            byte[] valueBytes = (channelValue + "\0").getBytes(StandardCharsets.UTF_8);
-            MemorySegment valueSegment = arena.allocate(valueBytes.length);
-            valueSegment.copyFrom(MemorySegment.ofArray(valueBytes));
-
-            // Invoke the native function
             csoundSetStringChannel.invoke(csoundInstance, nameSegment, valueSegment);
         } catch (Throwable t) {
             t.printStackTrace();
@@ -826,11 +777,7 @@ public class Csound {
         var global = Arena.global();
 
         try (Arena arena = Arena.ofConfined()) {
-            // Convert Java string to a C-style string
-            byte[] nameBytes = (channelName + "\0").getBytes(StandardCharsets.UTF_8);
-            MemorySegment nameSegment = arena.allocate(nameBytes.length);
-            nameSegment.copyFrom(MemorySegment.ofArray(nameBytes));
-
+            MemorySegment nameSegment = arena.allocateFrom(channelName);
             MemorySegment channelPtrPtr = arena.allocate(ADDRESS);
 
             int retVal = (int) csoundGetChannelPtr.invoke(csoundInstance, channelPtrPtr, nameSegment,

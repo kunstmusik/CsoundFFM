@@ -81,7 +81,7 @@ public class CsoundFFM {
                         outs a1, a1
                     endin
 
-                    // schedule(2, 0, 4)
+                    schedule(2, 0, 4)
                 """);
 
         csound.start();

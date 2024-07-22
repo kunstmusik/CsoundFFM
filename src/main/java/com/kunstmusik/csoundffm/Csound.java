@@ -22,6 +22,7 @@
  */
 package com.kunstmusik.csoundffm;
 
+import static com.kunstmusik.csoundffm.ControlChannelType.CSOUND_AUDIO_CHANNEL;
 import static com.kunstmusik.csoundffm.ControlChannelType.CSOUND_CONTROL_CHANNEL;
 import static com.kunstmusik.csoundffm.ControlChannelType.CSOUND_INPUT_CHANNEL;
 import static com.kunstmusik.csoundffm.ControlChannelType.CSOUND_OUTPUT_CHANNEL;
@@ -38,7 +39,6 @@ import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.lang.ref.Cleaner;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 
 /**
@@ -76,6 +76,8 @@ public class Csound {
     private static MethodHandle csoundGetNchnlsInput;
     private static MethodHandle csoundGet0dBFS;
 
+    private static MethodHandle csoundGetSpin;
+    private static MethodHandle csoundGetSpout;
     private static MethodHandle csoundSetControlChannel;
     private static MethodHandle csoundSetStringChannel;
     private static MethodHandle csoundGetChannelPtr;
@@ -175,6 +177,11 @@ public class Csound {
             csoundGet0dBFS = linker.downcallHandle(mylib.find("csoundGet0dBFS").orElseThrow(),
                     FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS));
 
+
+            csoundGetSpin = linker.downcallHandle(mylib.find("csoundGetSpin").orElseThrow(),
+                    FunctionDescriptor.of(ADDRESS, ADDRESS));
+            csoundGetSpout = linker.downcallHandle(mylib.find("csoundGetSpout").orElseThrow(),
+                    FunctionDescriptor.of(ADDRESS, ADDRESS));
             csoundSetControlChannel = linker.downcallHandle(mylib.find("csoundSetControlChannel").orElseThrow(),
                     FunctionDescriptor.ofVoid(ADDRESS, ADDRESS, JAVA_DOUBLE));
             csoundSetStringChannel = linker.downcallHandle(mylib.find("csoundSetStringChannel").orElseThrow(),
@@ -677,24 +684,24 @@ public class Csound {
     }
 
     /**
-     * Returns a DoubleBuffer wrapper of the Csound audio input working buffer
-     * (spin).Enables external software to write audio into Csound before
-     * calling csoundPerformKsmps. The length of the DoubleBuffer is set to
+     * Returns a MemorySegment of the Csound audio input working buffer
+     * (spin). Enables external software to write audio into Csound before
+     * calling csoundPerformKsmps. The length of the MemorySegment is set to
      * ksmps * nchnls_i.
      *
-     * @return DoubleBuffer wrapper of the Csound audio input working buffer
+     * @return MemorySegment of the Csound audio input working buffer
      *         (spin).
      */
     public MemorySegment getSpin() {
-        throw new UnsupportedOperationException("Not yet implemented.");
-        // ByteBuffer buffer = csoundGetSpin(csoundPtr);
-        // DoubleBuffer retVal = null;
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment spin = (MemorySegment) csoundGetSpin.invoke(csoundInstance);
+            spin = spin.reinterpret(JAVA_DOUBLE.byteSize() * getKsmps());
 
-        // if (buffer != null) {
-        // buffer.order(ByteOrder.nativeOrder());
-        // retVal = buffer.asDoubleBuffer();
-        // }
-        // return retVal;
+            return spin;
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return null;
+        }
     }
 
     /**
@@ -706,16 +713,15 @@ public class Csound {
      * @return MemorySegment of the Csound audio output working buffer (spout).
      */
     public MemorySegment getSpout() {
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment spout = (MemorySegment) csoundGetSpout.invoke(csoundInstance);
+            spout = spout.reinterpret(JAVA_DOUBLE.byteSize() * getKsmps());
 
-        throw new UnsupportedOperationException("Not yet implemented.");
-        // ByteBuffer buffer = csoundGetSpout(csoundPtr);
-        // DoubleBuffer retVal = null;
-
-        // if (buffer != null) {
-        // buffer.order(ByteOrder.nativeOrder());
-        // retVal = buffer.asDoubleBuffer();
-        // }
-        // return retVal;
+            return spout;
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return null;
+        }
     }
 
     /**
@@ -773,9 +779,6 @@ public class Csound {
      * @return MemorySegment for control channel data pointer.
      */
     public MemorySegment getControlChannelPtr(String channelName) {
-
-        var global = Arena.global();
-
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment nameSegment = arena.allocateFrom(channelName);
             MemorySegment channelPtrPtr = arena.allocate(ADDRESS);
@@ -794,17 +797,23 @@ public class Csound {
         }
     }
 
-    public MemorySegment getAudioChannelPtr(String name) {
-        throw new UnsupportedOperationException("Not yet implemented.");
-        // ByteBuffer buffer = csoundGetChannelPtr(csoundPtr, name,
-        // CSOUND_AUDIO_CHANNEL | CSOUND_INPUT_CHANNEL | CSOUND_OUTPUT_CHANNEL);
+    public MemorySegment getAudioChannelPtr(String channelName) {
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment nameSegment = arena.allocateFrom(channelName);
+            MemorySegment channelPtrPtr = arena.allocate(ADDRESS);
 
-        // DoubleBuffer retVal = null;
-        // if (buffer != null) {
-        // buffer.order(ByteOrder.nativeOrder());
-        // retVal = buffer.asDoubleBuffer();
-        // }
-        // return retVal;
+            int retVal = (int) csoundGetChannelPtr.invoke(csoundInstance, channelPtrPtr, nameSegment,
+                    CSOUND_AUDIO_CHANNEL | CSOUND_INPUT_CHANNEL | CSOUND_OUTPUT_CHANNEL);
+
+            // TODO - check retval, see ctcsound.py for example
+            MemorySegment channelPtr = channelPtrPtr.get(ADDRESS, 0);
+            channelPtr = channelPtr.reinterpret(JAVA_DOUBLE.byteSize() * getKsmps());
+
+            return channelPtr;
+        } catch (Throwable t) {
+            t.printStackTrace();
+            return null;
+        }
     }
 
     private static class CsoundCleanup implements Runnable {

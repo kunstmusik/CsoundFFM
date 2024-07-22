@@ -148,9 +148,54 @@ public class CsoundFFM {
         csound.reset();
     }
 
+    private static void testSpinSpout() {
+        Csound csound = new Csound();
+
+        csound.setOption("-n");
+        csound.setOption("--ksmps=16");
+        csound.setOption("--sample-rate=48000");
+        csound.setOption("--nchnls=1");
+        csound.setOption("--nchnls_i=1");
+        csound.setOption("--0dbfs=1");
+
+        csound.compileOrc("""
+                    instr 1
+                        print 5
+                        a1 = inch(1)
+                        out a1
+                    endin
+                    schedule(1, 0, -1)
+                """);
+
+        csound.start();
+
+        int ksmps = csound.getKsmps();
+        MemorySegment spin = csound.getSpin();
+        MemorySegment spout = csound.getSpout();
+
+        for(int i = 0; i < ksmps; i++) {
+            System.out.println (Math.cos(i / 300.0));
+            spin.setAtIndex(JAVA_DOUBLE, i, Math.cos(i / 300.0));
+            // spin.set(JAVA_DOUBLE, i, Math.sin(i / 300));
+            // System.out.println( Math.sin(i / 300.0));
+        }
+
+        csound.performKsmps();
+
+        for(int i = 0; i < ksmps; i++) {
+            double original = spin.getAtIndex(JAVA_DOUBLE, i);
+            double returned = spout.getAtIndex(JAVA_DOUBLE, i);
+            System.out.printf("Match: %b [ %g | %g ]\n", original == returned, original, returned);
+        }
+        csound.stop();
+        csound.cleanup();
+        csound.reset();
+    }
+
     public static void main(String[] args) {
         // testCompile();
         // test1();
         testChannels();
+        // testSpinSpout();
     }
 }

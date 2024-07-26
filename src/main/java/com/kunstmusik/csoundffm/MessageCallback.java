@@ -22,16 +22,22 @@
  */
 package com.kunstmusik.csoundffm;
 
+import java.lang.foreign.MemorySegment;
+
 /**
- * Signal Abstract Method interface for message callbacks to be used with 
- * Csound class. 
+ * Single Abstract Method interface for message callbacks to be used with
+ * Csound class.
  * 
  * <pre>
- * csound.setMessageCallback((attr, msg) -&gt; System.out.println(msg));
+ * MessageCallback cb = (cs, attr, msg) -&gt; {
+ *     var msgText = msg.reinterpret(Integer.MAX_VALUE).getString(0);
+ *     System.out.print(msgText);
+ * };
+ * csound.setMessageCallback(cb);
  * </pre>
  * 
  * @author Steven Yi
  */
 public interface MessageCallback {
-    public void callback(int attr, String msg);
+    public void callback(MemorySegment csound, int attr, MemorySegment msg);
 }

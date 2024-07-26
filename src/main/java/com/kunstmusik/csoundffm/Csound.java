@@ -38,6 +38,8 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.ref.Cleaner;
 import java.nio.file.Path;
 
@@ -81,6 +83,7 @@ public class Csound {
     private static MethodHandle csoundSetControlChannel;
     private static MethodHandle csoundSetStringChannel;
     private static MethodHandle csoundGetChannelPtr;
+    private static MethodHandle csoundSetMessageStringCallback = null;
 
     private static final Cleaner cleaner = Cleaner.create();
 
@@ -177,7 +180,6 @@ public class Csound {
             csoundGet0dBFS = linker.downcallHandle(mylib.find("csoundGet0dBFS").orElseThrow(),
                     FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS));
 
-
             csoundGetSpin = linker.downcallHandle(mylib.find("csoundGetSpin").orElseThrow(),
                     FunctionDescriptor.of(ADDRESS, ADDRESS));
             csoundGetSpout = linker.downcallHandle(mylib.find("csoundGetSpout").orElseThrow(),
@@ -188,6 +190,10 @@ public class Csound {
                     FunctionDescriptor.ofVoid(ADDRESS, ADDRESS, ADDRESS));
             csoundGetChannelPtr = linker.downcallHandle(mylib.find("csoundGetChannelPtr").orElseThrow(),
                     FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, ADDRESS, JAVA_INT));
+
+            csoundSetMessageStringCallback = linker.downcallHandle(
+                    mylib.find("csoundSetMessageStringCallback").orElseThrow(),
+                    FunctionDescriptor.ofVoid(ADDRESS, ADDRESS));
 
         } catch (Throwable t) {
             t.printStackTrace();
@@ -760,14 +766,26 @@ public class Csound {
 
     /**
      * Sets a MessageCallback to be called by Csound to print an informational
-     * message.This callback is never called in --realtime mode.
+     * message. This callback is never called in --realtime mode. (Uses
+     * csoundSetMessageStringCallback.)
      *
      * @param msgCallback Callback to execute to print messages.
      */
     public void setMessageCallback(MessageCallback msgCallback) {
-        throw new UnsupportedOperationException("Not yet implemented.");
-        // csoundSetMessageCallback(csoundPtr, msgCallback);
-        // this.messageCallback = msgCallback;
+        try (Arena arena = Arena.ofConfined()) {
+            MethodHandle callbackHandle = MethodHandles.lookup().findVirtual(
+                    MessageCallback.class, "callback",
+                    MethodType.methodType(void.class, MemorySegment.class, int.class, MemorySegment.class));
+
+            MemorySegment callbackSegment = Linker.nativeLinker().upcallStub(
+                    callbackHandle.bindTo(msgCallback),
+                    FunctionDescriptor.ofVoid(ADDRESS, JAVA_INT, ADDRESS),
+                    Arena.global());
+
+            csoundSetMessageStringCallback.invoke(csoundInstance, callbackSegment);
+        } catch (Throwable t) {
+            t.printStackTrace();
+        }
     }
 
     /**

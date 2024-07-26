@@ -97,6 +97,12 @@ public class CsoundFFM {
     private static void testChannels() {
         Csound csound = new Csound();
 
+        MessageCallback cb = (cs, attr, msg) -> {
+            var msgText = msg.reinterpret(Integer.MAX_VALUE).getString(0);
+            System.out.print(msgText);
+        };
+        csound.setMessageCallback(cb);
+
         csound.setOption("-odac");
         csound.setOption("--ksmps=64");
         csound.setOption("--sample-rate=48000");

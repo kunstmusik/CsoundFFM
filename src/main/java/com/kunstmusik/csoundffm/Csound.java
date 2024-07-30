@@ -120,11 +120,10 @@ public class Csound {
             SymbolLookup mylib = SymbolLookup.libraryLookup(libraryPath, arena);
 
             csoundInitialize = linker.downcallHandle(
-                    mylib.find("csoundInitialize").orElseThrow(), FunctionDescriptor.ofVoid(ADDRESS));
+                    mylib.find("csoundInitialize").orElseThrow(), FunctionDescriptor.ofVoid(JAVA_INT));
 
             try (Arena confined = Arena.ofConfined()) {
-                var intSegment = arena.allocate(ValueLayout.JAVA_INT, 3);
-                csoundInitialize.invoke(intSegment);
+                csoundInitialize.invoke(3);
             }
 
             csoundCreate = linker.downcallHandle(mylib.find("csoundCreate").orElseThrow(),

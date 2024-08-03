@@ -1,5 +1,6 @@
 package com.kunstmusik.csoundffm;
 
+/** Control Channel Types */
 public class ControlChannelType {
   public static final int CSOUND_CONTROL_CHANNEL = 1;
   public static final int CSOUND_AUDIO_CHANNEL = 2;

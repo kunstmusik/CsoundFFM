@@ -44,7 +44,12 @@ import java.nio.file.Path;
 
 /**
  *
- * @author stevenyi
+ * Csound engine instance that wraps Csound's C API into an object and
+ * simplifies usage of the API.
+ *
+ * Comments for methods based on documentation from csound.h.
+ *
+ * @author Steven Yi
  */
 public class Csound {
 
@@ -112,17 +117,17 @@ public class Csound {
             }
         } else if (isLinux) {
             var usrLocalLibPath = "/usr/local/lib/libcsound64.so";
-            if(new File(usrLocalLibPath).exists()) {
+            if (new File(usrLocalLibPath).exists()) {
                 return usrLocalLibPath;
             }
-            
+
         }
 
         return libraryPath;
     }
 
     private static void initialize() {
-        
+
         String libraryPath = getLibraryPath();
 
         Arena arena = Arena.global();
@@ -231,6 +236,10 @@ public class Csound {
         }
     }
 
+    /**
+     * Constructor for Csound object. Registers to call csoundDelete for user when
+     * there are no more references to the Csound object.
+     */
     public Csound() {
         try (Arena arena = Arena.ofConfined()) {
             var arg = arena.allocate(ADDRESS);
@@ -336,7 +345,7 @@ public class Csound {
      * csound.compileOrc(csound, orc);
      * </pre>
      *
-     * @param orc Csound orchestra code
+     * @param orcCode Csound orchestra code
      * @return Returns a non-zero error code on failure.
      */
     public int compileOrc(String orcCode) {
@@ -355,7 +364,7 @@ public class Csound {
      * placed on a queue for asynchronous merge into the running engine, and
      * evaluation.The function returns following parsing and compilation.
      *
-     * @param orc Csound orchestra code
+     * @param orcCode Csound orchestra code
      * @return Returns a non-zero error code on failure.
      */
     public int compileOrcAsync(String orcCode) {
@@ -522,6 +531,8 @@ public class Csound {
      * preprocessing is not performed and "i" statements are dispatched as
      * real-time events, the &lt;CsOptions&gt; tag is ignored, and performance
      * continues indefinitely or until ended using the API.
+     * 
+     * @return Returns a non-zero error code on failure.
      */
     public int start() {
         try {
@@ -572,6 +583,8 @@ public class Csound {
      * zero return value, csoundPerform() can be called again to continue the
      * stopped performance. Otherwise, csoundReset() should be called to clean
      * up after the finished or failed performance.
+     * 
+     * @return Returns a non-zero error code on failure.
      */
     public int perform() {
         int res;
@@ -803,9 +816,9 @@ public class Csound {
     /**
      * Returns a MemorySegment for a control channel. Allows efficient reading
      * and writing of the channel as it does not have to look up the channel
-     * each time as it does with setChannel().
+     * each time as it does with getChannel().
      *
-     * @param name Name of control channel
+     * @param channelName Name of control channel
      * @return MemorySegment for control channel data pointer.
      */
     public MemorySegment getControlChannelPtr(String channelName) {
@@ -827,6 +840,15 @@ public class Csound {
         }
     }
 
+    /**
+     * Returns a MemorySegment for an audio channel. Allows efficient reading
+     * and writing of the channel as it does not have to look up the channel
+     * each time as it does with getChannel(). MemorySegment size is set to 
+     * ksmps length.
+     *
+     * @param channelName Name of audio channel
+     * @return MemorySegment for audio channel data pointer.
+     */
     public MemorySegment getAudioChannelPtr(String channelName) {
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment nameSegment = arena.allocateFrom(channelName);

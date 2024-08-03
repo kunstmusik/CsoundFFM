@@ -27,7 +27,7 @@ import static java.lang.foreign.ValueLayout.JAVA_DOUBLE;
 import java.lang.foreign.MemorySegment;
 
 /**
- *
+ * Class for testing CsoundFFM (useful for developers of CsoundFFM)
  * @author stevenyi
  */
 public class CsoundFFM {
@@ -40,7 +40,7 @@ public class CsoundFFM {
     }
 
     private static void test1() {
-        System.out.println(String.format("Csound Version: %d", Csound.getVersion()));
+        System.out.printf("Csound Version: %d%n", Csound.getVersion());
         Csound csound = new Csound();
 
         csound.setOption("-odac");

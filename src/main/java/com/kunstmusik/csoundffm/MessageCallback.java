@@ -39,5 +39,14 @@ import java.lang.foreign.MemorySegment;
  * @author Steven Yi
  */
 public interface MessageCallback {
+
+    /**
+     * Callback method for message callbacks
+     * 
+     * @param csound Csound instance
+     * @param attr text attributes
+     * @param msg message text
+     */
+
     public void callback(MemorySegment csound, int attr, MemorySegment msg);
 }

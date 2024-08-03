@@ -36,7 +36,6 @@ import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
-import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
@@ -93,9 +92,10 @@ public class Csound {
 
     private MemorySegment csoundInstance;
 
-    private static void initialize() {
+    private static String getLibraryPath() {
         var os = System.getProperty("os.name").toLowerCase();
         var isMac = ((os.indexOf("mac") >= 0) || (os.indexOf("darwin") >= 0));
+        var isLinux = os.toLowerCase().contains("linux");
 
         String libraryPath = "csound64";
 
@@ -110,7 +110,20 @@ public class Csound {
             } else if (new File(sysFramework).exists()) {
                 libraryPath = sysFramework;
             }
+        } else if (isLinux) {
+            var usrLocalLibPath = "/usr/local/lib/libcsound64.so";
+            if(new File(usrLocalLibPath).exists()) {
+                return usrLocalLibPath;
+            }
+            
         }
+
+        return libraryPath;
+    }
+
+    private static void initialize() {
+        
+        String libraryPath = getLibraryPath();
 
         Arena arena = Arena.global();
 

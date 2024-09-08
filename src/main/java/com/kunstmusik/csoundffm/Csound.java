@@ -60,26 +60,19 @@ public class Csound {
     private static MethodHandle csoundEvalCode = null;
     private static MethodHandle csoundCompile = null;
     private static MethodHandle csoundCompileOrc = null;
-    private static MethodHandle csoundCompileOrcAsync = null;
-    private static MethodHandle csoundCompileCsdText = null;
+    private static MethodHandle csoundCompileCsd = null;
     private static MethodHandle csoundGetScoreTime = null;
-    private static MethodHandle csoundInputMessage = null;
-    private static MethodHandle csoundInputMessageAsync = null;
-    private static MethodHandle csoundReadScore = null;
-    private static MethodHandle csoundReadScoreAsync = null;
+    private static MethodHandle csoundEventString = null;
     private static MethodHandle csoundPerformKsmps = null;
 
     private static MethodHandle csoundStart = null;
-    private static MethodHandle csoundStop = null;
-    private static MethodHandle csoundCleanup = null;
     private static MethodHandle csoundReset = null;
     private static MethodHandle csoundDestroy = null;
 
     private static MethodHandle csoundGetSr;
     private static MethodHandle csoundGetKr;
     private static MethodHandle csoundGetKsmps;
-    private static MethodHandle csoundGetNchnls;
-    private static MethodHandle csoundGetNchnlsInput;
+    private static MethodHandle csoundGetChannels;
     private static MethodHandle csoundGet0dBFS;
 
     private static MethodHandle csoundGetSpin;
@@ -145,7 +138,7 @@ public class Csound {
             }
 
             csoundCreate = linker.downcallHandle(mylib.find("csoundCreate").orElseThrow(),
-                    FunctionDescriptor.of(ADDRESS, ADDRESS));
+                    FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS));
             csoundGetVersion = linker.downcallHandle(mylib.find("csoundGetVersion").orElseThrow(),
                     FunctionDescriptor.of(JAVA_INT));
             csoundSetOption = linker.downcallHandle(mylib.find("csoundSetOption").orElseThrow(),
@@ -155,29 +148,18 @@ public class Csound {
             csoundCompile = linker.downcallHandle(mylib.find("csoundCompile").orElseThrow(),
                     FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, ADDRESS));
             csoundCompileOrc = linker.downcallHandle(mylib.find("csoundCompileOrc").orElseThrow(),
-                    FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
-            csoundCompileOrcAsync = linker.downcallHandle(mylib.find("csoundCompileOrcAsync").orElseThrow(),
-                    FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
-            csoundCompileCsdText = linker.downcallHandle(mylib.find("csoundCompileCsdText").orElseThrow(),
-                    FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
+                    FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_INT));
+            csoundCompileCsd = linker.downcallHandle(mylib.find("csoundCompileCSD").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_INT));
             csoundGetScoreTime = linker.downcallHandle(mylib.find("csoundGetScoreTime").orElseThrow(),
                     FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS));
-            csoundInputMessage = linker.downcallHandle(mylib.find("csoundInputMessage").orElseThrow(),
-                    FunctionDescriptor.ofVoid(ADDRESS, ADDRESS));
-            csoundInputMessageAsync = linker.downcallHandle(mylib.find("csoundInputMessageAsync").orElseThrow(),
-                    FunctionDescriptor.ofVoid(ADDRESS, ADDRESS));
-            csoundReadScore = linker.downcallHandle(mylib.find("csoundReadScore").orElseThrow(),
-                    FunctionDescriptor.ofVoid(ADDRESS, ADDRESS));
-            csoundReadScoreAsync = linker.downcallHandle(mylib.find("csoundReadScoreAsync").orElseThrow(),
-                    FunctionDescriptor.ofVoid(ADDRESS, ADDRESS));
+            csoundEventString = linker.downcallHandle(mylib.find("csoundEventString").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS, ADDRESS, JAVA_INT));
+
             csoundPerformKsmps = linker.downcallHandle(mylib.find("csoundPerformKsmps").orElseThrow(),
                     FunctionDescriptor.of(JAVA_INT, ADDRESS));
 
             csoundStart = linker.downcallHandle(mylib.find("csoundStart").orElseThrow(),
-                    FunctionDescriptor.of(JAVA_INT, ADDRESS));
-            csoundStop = linker.downcallHandle(mylib.find("csoundStop").orElseThrow(),
-                    FunctionDescriptor.ofVoid(ADDRESS));
-            csoundCleanup = linker.downcallHandle(mylib.find("csoundCleanup").orElseThrow(),
                     FunctionDescriptor.of(JAVA_INT, ADDRESS));
             csoundReset = linker.downcallHandle(mylib.find("csoundReset").orElseThrow(),
                     FunctionDescriptor.ofVoid(ADDRESS));
@@ -190,10 +172,8 @@ public class Csound {
                     FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS));
             csoundGetKsmps = linker.downcallHandle(mylib.find("csoundGetKsmps").orElseThrow(),
                     FunctionDescriptor.of(JAVA_INT, ADDRESS));
-            csoundGetNchnls = linker.downcallHandle(mylib.find("csoundGetNchnls").orElseThrow(),
-                    FunctionDescriptor.of(JAVA_INT, ADDRESS));
-            csoundGetNchnlsInput = linker.downcallHandle(mylib.find("csoundGetNchnlsInput").orElseThrow(),
-                    FunctionDescriptor.of(JAVA_INT, ADDRESS));
+            csoundGetChannels = linker.downcallHandle(mylib.find("csoundGetChannels").orElseThrow(),
+                    FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT));
             csoundGet0dBFS = linker.downcallHandle(mylib.find("csoundGet0dBFS").orElseThrow(),
                     FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS));
 
@@ -242,8 +222,9 @@ public class Csound {
      */
     public Csound() {
         try (Arena arena = Arena.ofConfined()) {
+            csoundInitialize.invoke(3);
             var arg = arena.allocate(ADDRESS);
-            csoundInstance = (MemorySegment) csoundCreate.invokeExact(arg);
+            csoundInstance = (MemorySegment) csoundCreate.invokeExact(arg, MemorySegment.NULL);
             cleanable = cleaner.register(this, new CsoundCleanup(csoundInstance));
         } catch (Throwable e) {
             e.printStackTrace();
@@ -258,6 +239,9 @@ public class Csound {
      * @return Returns a non-zero error code on failure.
      */
     public int setOption(String option) {
+        if (option == null) {
+            return -1;
+        }
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment optionSegment = arena.allocateFrom(option);
 
@@ -282,6 +266,9 @@ public class Csound {
      * @return result of value passed to 'return' opcode in global space
      */
     public double evalCode(String orcCode) {
+        if (orcCode == null) {
+            return -1;
+        }
 
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment orcCodeSegment = arena.allocateFrom(orcCode);
@@ -317,6 +304,9 @@ public class Csound {
      * @return Returns a non-zero error code on failure.
      */
     public int compile(String[] args) {
+        if (args == null) {
+            return -1;
+        }
         try (Arena arena = Arena.ofConfined()) {
             // Allocate memory for the array of pointers
             MemorySegment argsArray = arena.allocate(ADDRESS, args.length);
@@ -342,36 +332,21 @@ public class Csound {
      *
      * <pre>
      * String orc = "instr 1 \n a1 rand 0dbfs/4 \n out a1 \n";
-     * csound.compileOrc(csound, orc);
+     * csound.compileOrc(csound, orc, 0);
      * </pre>
      *
      * @param orcCode Csound orchestra code
+     * @param async   0 for synchronous, 1 for asynchronous.
      * @return Returns a non-zero error code on failure.
      */
-    public int compileOrc(String orcCode) {
-        try (Arena arena = Arena.ofConfined()) {
-            MemorySegment orcCodeSegment = arena.allocateFrom(orcCode);
-
-            return (int) csoundCompileOrc.invoke(csoundInstance, orcCodeSegment);
-        } catch (Throwable t) {
-            t.printStackTrace();
+    public int compileOrc(String orcCode, int async) {
+        if (orcCode == null) {
             return -1;
         }
-    }
-
-    /**
-     * Async version of compileOrc().The code is parsed and compiled, then
-     * placed on a queue for asynchronous merge into the running engine, and
-     * evaluation.The function returns following parsing and compilation.
-     *
-     * @param orcCode Csound orchestra code
-     * @return Returns a non-zero error code on failure.
-     */
-    public int compileOrcAsync(String orcCode) {
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment orcCodeSegment = arena.allocateFrom(orcCode);
 
-            return (int) csoundCompileOrcAsync.invoke(csoundInstance, orcCodeSegment);
+            return (int) csoundCompileOrc.invoke(csoundInstance, orcCodeSegment, async);
         } catch (Throwable t) {
             t.printStackTrace();
             return -1;
@@ -428,14 +403,18 @@ public class Csound {
      *
      * </pre>
      *
-     * @param csdText Csound CSD text
+     * @param csd  Csound CSD text
+     * @param mode 0 = treat csd as file name, 1 = treat csd as text
      * @return Returns a non-zero error code on failure.
      */
-    public int compileCsdText(String csdText) {
+    public int compileCSD(String csd, int mode) {
+        if (csd == null) {
+            return -1;
+        }
         try (Arena arena = Arena.ofConfined()) {
-            MemorySegment csdTextSegment = arena.allocateFrom(csdText);
+            MemorySegment csdTextSegment = arena.allocateFrom(csd);
 
-            return (int) csoundCompileCsdText.invoke(csoundInstance, csdTextSegment);
+            return (int) csoundCompileCsd.invoke(csoundInstance, csdTextSegment, mode);
         } catch (Throwable t) {
             t.printStackTrace();
             return -1;
@@ -458,65 +437,22 @@ public class Csound {
     }
 
     /**
-     * Input a String (as if from a console), used for line events.
-     *
+     * Send a new event as a NULL-terminated string
+     * Multiple events separated by newlines are possible
+     * and score preprocessing (carry, etc) is applied.
+     * optionally run asynchronously (async = 1)
+     * 
      * @param scoreText Csound score text.
+     * @param async     0 for synchronous, 1 for asynchronous.
      */
-    public void inputMessage(String scoreText) {
-        try (Arena arena = Arena.ofConfined()) {
-            MemorySegment scoreTextSegment = arena.allocateFrom(scoreText);
-
-            csoundInputMessage.invoke(csoundInstance, scoreTextSegment);
-        } catch (Throwable t) {
-            t.printStackTrace();
+    public void eventString(String scoreText, int async) {
+        if (scoreText == null) {
+            return;
         }
-    }
-
-    /**
-     * Asynchronous version of inputMessage().
-     *
-     * @param scoreText Csound score text.
-     */
-    public void inputMessageAsync(String scoreText) {
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment scoreTextSegment = arena.allocateFrom(scoreText);
 
-            csoundInputMessageAsync.invoke(csoundInstance, scoreTextSegment);
-        } catch (Throwable t) {
-            t.printStackTrace();
-        }
-    }
-
-    /**
-     * Read, preprocess, and load a score from a String.It can be called
-     * repeatedly, with the new score events being added to the currently
-     * scheduled ones.
-     *
-     * @param scoreText Csound score text.
-     * @return Returns a non-zero error code on failure.
-     *
-     */
-    public int readScore(String scoreText) {
-        try (Arena arena = Arena.ofConfined()) {
-            MemorySegment scoreTextSegment = arena.allocateFrom(scoreText);
-
-            return (int) csoundReadScore.invoke(csoundInstance, scoreTextSegment);
-        } catch (Throwable t) {
-            t.printStackTrace();
-            return -1;
-        }
-    }
-
-    /**
-     * Asynchronous version of readScore().
-     *
-     * @param scoreText Csound score text.
-     */
-    public void readScoreAsync(String scoreText) {
-        try (Arena arena = Arena.ofConfined()) {
-            MemorySegment scoreTextSegment = arena.allocateFrom(scoreText);
-
-            csoundReadScoreAsync.invoke(csoundInstance, scoreTextSegment);
+            csoundEventString.invoke(csoundInstance, scoreTextSegment, async);
         } catch (Throwable t) {
             t.printStackTrace();
         }
@@ -540,18 +476,6 @@ public class Csound {
         } catch (Throwable t) {
             t.printStackTrace();
             return -1;
-        }
-    }
-
-    /**
-     * Stops a perform() running (may be in another thread). Note that it is not
-     * guaranteed that perform() has already stopped when this function returns.
-     */
-    public void stop() {
-        try {
-            csoundStop.invokeExact(csoundInstance);
-        } catch (Throwable e) {
-            e.printStackTrace();
         }
     }
 
@@ -593,23 +517,6 @@ public class Csound {
         } while (res == 0);
 
         return res;
-    }
-
-    /**
-     * Prints information about the end of a performance, and closes audio and
-     * MIDI devices.Note: after calling cleanup(), the operation of the perform
-     * functions is undefined.
-     *
-     * @return Returns a non-zero error code on failure.
-     *
-     */
-    public int cleanup() {
-        try {
-            return (int) csoundCleanup.invokeExact(csoundInstance);
-        } catch (Throwable t) {
-            t.printStackTrace();
-            return -1;
-        }
     }
 
     /**
@@ -670,30 +577,15 @@ public class Csound {
     }
 
     /**
-     * Returns the number of audio output channels. Set through the nchnls
-     * header variable in the csd file.
+     * Returns the number of audio channels in the Csound instance. If isInput = 0,
+     * the value of nchnls is returned, otherwise nchnls_i. If this variable is not
+     * set, the value is always taken from nchnls.
      *
      * @return The number of audio output channels
      */
-    public int getNchnls() {
+    public int getChannels(int isInput) {
         try {
-            return (int) csoundGetNchnls.invokeExact(csoundInstance);
-        } catch (Throwable t) {
-            t.printStackTrace();
-            return -1;
-        }
-    }
-
-    /**
-     * Returns the number of audio input channels. Set through the nchnls_i
-     * header variable in the csd file. If this variable is not set, the value
-     * is taken from nchnls.
-     *
-     * @return The number of audio input channels
-     */
-    public int getNchnlsInput() {
-        try {
-            return (int) csoundGetNchnlsInput.invokeExact(csoundInstance);
+            return (int) csoundGetChannels.invokeExact(csoundInstance, isInput);
         } catch (Throwable t) {
             t.printStackTrace();
             return -1;
@@ -763,6 +655,9 @@ public class Csound {
      * @param value       Value to set.
      */
     public void setChannel(String channelName, double value) {
+        if (channelName == null) {
+            return;
+        }
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment nameSegment = arena.allocateFrom(channelName);
 
@@ -779,9 +674,12 @@ public class Csound {
      * @param channelValue Value to set.
      */
     public void setStringChannel(String channelName, String channelValue) {
+        if (channelName == null) {
+            return;
+        }
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment nameSegment = arena.allocateFrom(channelName);
-            MemorySegment valueSegment = arena.allocateFrom(channelValue);
+            MemorySegment valueSegment = arena.allocateFrom(channelValue == null ? "" : channelValue);
 
             csoundSetStringChannel.invoke(csoundInstance, nameSegment, valueSegment);
         } catch (Throwable t) {
@@ -798,6 +696,12 @@ public class Csound {
      */
     public void setMessageCallback(MessageCallback msgCallback) {
         try (Arena arena = Arena.ofConfined()) {
+
+            if (msgCallback == null) {
+                csoundSetMessageStringCallback.invoke(csoundInstance, MemorySegment.NULL);
+                return;
+            }
+
             MethodHandle callbackHandle = MethodHandles.lookup().findVirtual(
                     MessageCallback.class, "callback",
                     MethodType.methodType(void.class, MemorySegment.class, int.class, MemorySegment.class));
@@ -822,6 +726,9 @@ public class Csound {
      * @return MemorySegment for control channel data pointer.
      */
     public MemorySegment getControlChannelPtr(String channelName) {
+        if (channelName == null) {
+            return null;
+        }
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment nameSegment = arena.allocateFrom(channelName);
             MemorySegment channelPtrPtr = arena.allocate(ADDRESS);
@@ -843,13 +750,16 @@ public class Csound {
     /**
      * Returns a MemorySegment for an audio channel. Allows efficient reading
      * and writing of the channel as it does not have to look up the channel
-     * each time as it does with getChannel(). MemorySegment size is set to 
+     * each time as it does with getChannel(). MemorySegment size is set to
      * ksmps length.
      *
      * @param channelName Name of audio channel
      * @return MemorySegment for audio channel data pointer.
      */
     public MemorySegment getAudioChannelPtr(String channelName) {
+        if (channelName == null) {
+            return null;
+        }
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment nameSegment = arena.allocateFrom(channelName);
             MemorySegment channelPtrPtr = arena.allocate(ADDRESS);

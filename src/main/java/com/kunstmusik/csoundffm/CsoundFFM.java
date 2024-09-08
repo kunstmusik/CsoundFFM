@@ -59,7 +59,7 @@ public class CsoundFFM {
         // double v = csound.evalCode("return 0.5");
         // System.out.printf("Evaluated Code: %g\n", v);
 
-        csound.compileCsdText("""
+        csound.compileCSD("""
                    <CsoundSynthesizer>
                    <CsInstruments>
                     instr 1
@@ -72,7 +72,7 @@ public class CsoundFFM {
                     i1 0 2
                     </CsScore>
                     </CsoundSynthesizer>
-                """);
+                """, 1);
 
         csound.compileOrc("""
 
@@ -82,15 +82,13 @@ public class CsoundFFM {
                     endin
 
                     schedule(2, 0, 4)
-                """);
+                """, 0);
 
         csound.start();
 
         while (csound.performKsmps() == 0)
             ;
 
-        csound.stop();
-        csound.cleanup();
         csound.reset();
     }
 
@@ -127,7 +125,7 @@ public class CsoundFFM {
 
                     schedule(1, 0, 2)
                     event_i("e", 0, 2)
-                """);
+                """, 0);
 
         csound.start();
 
@@ -149,9 +147,8 @@ public class CsoundFFM {
             counter++;
         } while (csound.performKsmps() == 0);
 
-        csound.stop();
-        csound.cleanup();
         csound.reset();
+        csound.setMessageCallback(null);
     }
 
     private static void testSpinSpout() {
@@ -171,7 +168,7 @@ public class CsoundFFM {
                         out a1
                     endin
                     schedule(1, 0, -1)
-                """);
+                """, 0);
 
         csound.start();
 
@@ -193,8 +190,6 @@ public class CsoundFFM {
             double returned = spout.getAtIndex(JAVA_DOUBLE, i);
             System.out.printf("Match: %b [ %g | %g ]\n", original == returned, original, returned);
         }
-        csound.stop();
-        csound.cleanup();
         csound.reset();
     }
 

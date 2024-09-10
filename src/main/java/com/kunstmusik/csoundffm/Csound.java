@@ -53,6 +53,8 @@ import java.nio.file.Path;
  */
 public class Csound {
 
+    private static boolean isCsound6 = false;
+
     private static MethodHandle csoundInitialize = null;
     private static MethodHandle csoundCreate = null;
     private static MethodHandle csoundGetVersion = null;
@@ -62,7 +64,6 @@ public class Csound {
     private static MethodHandle csoundCompileOrc = null;
     private static MethodHandle csoundCompileCsd = null;
     private static MethodHandle csoundGetScoreTime = null;
-    private static MethodHandle csoundEventString = null;
     private static MethodHandle csoundPerformKsmps = null;
 
     private static MethodHandle csoundStart = null;
@@ -72,7 +73,6 @@ public class Csound {
     private static MethodHandle csoundGetSr;
     private static MethodHandle csoundGetKr;
     private static MethodHandle csoundGetKsmps;
-    private static MethodHandle csoundGetChannels;
     private static MethodHandle csoundGet0dBFS;
 
     private static MethodHandle csoundGetSpin;
@@ -81,6 +81,18 @@ public class Csound {
     private static MethodHandle csoundSetStringChannel;
     private static MethodHandle csoundGetChannelPtr;
     private static MethodHandle csoundSetMessageStringCallback = null;
+
+    // CS7 API
+    private static MethodHandle csoundEventString = null;
+    private static MethodHandle csoundGetChannels;
+
+    // CS6 API
+    private static MethodHandle csoundCompileOrcAsync = null;
+    private static MethodHandle csoundReadScore = null;
+    private static MethodHandle csoundReadScoreAsync = null;
+    private static MethodHandle csoundCompileCsdText = null;
+    private static MethodHandle csoundGetNchnls;
+    private static MethodHandle csoundGetNchnlsInput;
 
     private static final Cleaner cleaner = Cleaner.create();
 
@@ -137,24 +149,57 @@ public class Csound {
                 csoundInitialize.invoke(3);
             }
 
-            csoundCreate = linker.downcallHandle(mylib.find("csoundCreate").orElseThrow(),
-                    FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS));
             csoundGetVersion = linker.downcallHandle(mylib.find("csoundGetVersion").orElseThrow(),
                     FunctionDescriptor.of(JAVA_INT));
+
+            int version = getVersion();
+            if (version < 6000) {
+                throw new Exception("Csound version must be 6.0 or greater");
+            }
+            isCsound6 = version < 7000;
+
+            if (isCsound6) {
+                csoundCreate = linker.downcallHandle(mylib.find("csoundCreate").orElseThrow(),
+                        FunctionDescriptor.of(ADDRESS, ADDRESS));
+                csoundCompileOrc = linker.downcallHandle(mylib.find("csoundCompileOrc").orElseThrow(),
+                        FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
+                csoundCompileOrcAsync = linker.downcallHandle(mylib.find("csoundCompileOrcAsync").orElseThrow(),
+                        FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
+                csoundCompileCsdText = linker.downcallHandle(mylib.find("csoundCompileCsdText").orElseThrow(),
+                        FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
+                csoundReadScore = linker.downcallHandle(mylib.find("csoundReadScore").orElseThrow(),
+                        FunctionDescriptor.ofVoid(ADDRESS, ADDRESS));
+                csoundReadScoreAsync = linker.downcallHandle(mylib.find("csoundReadScoreAsync").orElseThrow(),
+                        FunctionDescriptor.ofVoid(ADDRESS, ADDRESS));
+                csoundGetNchnls = linker.downcallHandle(mylib.find("csoundGetNchnls").orElseThrow(),
+                        FunctionDescriptor.of(JAVA_INT, ADDRESS));
+                csoundGetNchnlsInput = linker.downcallHandle(mylib.find("csoundGetNchnlsInput").orElseThrow(),
+                        FunctionDescriptor.of(JAVA_INT, ADDRESS));
+            } else {
+                csoundCreate = linker.downcallHandle(mylib.find("csoundCreate").orElseThrow(),
+                        FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS));
+
+                csoundCompileOrc = linker.downcallHandle(mylib.find("csoundCompileOrc").orElseThrow(),
+                        FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_INT));
+
+                csoundCompileCsd = linker.downcallHandle(mylib.find("csoundCompileCSD").orElseThrow(),
+                        FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_INT));
+
+                csoundEventString = linker.downcallHandle(mylib.find("csoundEventString").orElseThrow(),
+                        FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS, ADDRESS, JAVA_INT));
+
+                csoundGetChannels = linker.downcallHandle(mylib.find("csoundGetChannels").orElseThrow(),
+                        FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT));
+            }
+
             csoundSetOption = linker.downcallHandle(mylib.find("csoundSetOption").orElseThrow(),
                     FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
             csoundEvalCode = linker.downcallHandle(mylib.find("csoundEvalCode").orElseThrow(),
                     FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS, ADDRESS));
             csoundCompile = linker.downcallHandle(mylib.find("csoundCompile").orElseThrow(),
                     FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, ADDRESS));
-            csoundCompileOrc = linker.downcallHandle(mylib.find("csoundCompileOrc").orElseThrow(),
-                    FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_INT));
-            csoundCompileCsd = linker.downcallHandle(mylib.find("csoundCompileCSD").orElseThrow(),
-                    FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_INT));
             csoundGetScoreTime = linker.downcallHandle(mylib.find("csoundGetScoreTime").orElseThrow(),
                     FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS));
-            csoundEventString = linker.downcallHandle(mylib.find("csoundEventString").orElseThrow(),
-                    FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS, ADDRESS, JAVA_INT));
 
             csoundPerformKsmps = linker.downcallHandle(mylib.find("csoundPerformKsmps").orElseThrow(),
                     FunctionDescriptor.of(JAVA_INT, ADDRESS));
@@ -172,8 +217,6 @@ public class Csound {
                     FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS));
             csoundGetKsmps = linker.downcallHandle(mylib.find("csoundGetKsmps").orElseThrow(),
                     FunctionDescriptor.of(JAVA_INT, ADDRESS));
-            csoundGetChannels = linker.downcallHandle(mylib.find("csoundGetChannels").orElseThrow(),
-                    FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT));
             csoundGet0dBFS = linker.downcallHandle(mylib.find("csoundGet0dBFS").orElseThrow(),
                     FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS));
 
@@ -223,8 +266,8 @@ public class Csound {
     public Csound() {
         try (Arena arena = Arena.ofConfined()) {
             csoundInitialize.invoke(3);
-            var arg = arena.allocate(ADDRESS);
-            csoundInstance = (MemorySegment) csoundCreate.invokeExact(arg, MemorySegment.NULL);
+            csoundInstance = isCsound6 ? (MemorySegment) csoundCreate.invokeExact(MemorySegment.NULL)
+                    : (MemorySegment) csoundCreate.invokeExact(MemorySegment.NULL, MemorySegment.NULL);
             cleanable = cleaner.register(this, new CsoundCleanup(csoundInstance));
         } catch (Throwable e) {
             e.printStackTrace();
@@ -346,6 +389,14 @@ public class Csound {
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment orcCodeSegment = arena.allocateFrom(orcCode);
 
+            if (isCsound6) {
+                if (async == 0) {
+                    return (int) csoundCompileOrc.invoke(csoundInstance, orcCodeSegment);
+                } else {
+                    return (int) csoundCompileOrcAsync.invoke(csoundInstance, orcCodeSegment);
+                }
+            }
+
             return (int) csoundCompileOrc.invoke(csoundInstance, orcCodeSegment, async);
         } catch (Throwable t) {
             t.printStackTrace();
@@ -414,6 +465,14 @@ public class Csound {
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment csdTextSegment = arena.allocateFrom(csd);
 
+            if (isCsound6) {
+                if (mode == 0) {
+                    throw new Exception("Csound 6 compileCsd is not supported with mode 0");
+                } else {
+                    return (int) csoundCompileCsdText.invoke(csoundInstance, csdTextSegment);
+                }
+            }
+
             return (int) csoundCompileCsd.invoke(csoundInstance, csdTextSegment, mode);
         } catch (Throwable t) {
             t.printStackTrace();
@@ -452,7 +511,16 @@ public class Csound {
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment scoreTextSegment = arena.allocateFrom(scoreText);
 
-            csoundEventString.invoke(csoundInstance, scoreTextSegment, async);
+            if (isCsound6) {
+                if (async == 0) {
+                    csoundReadScore.invoke(csoundInstance, scoreTextSegment);
+                } else {
+                    csoundReadScoreAsync.invoke(csoundInstance, scoreTextSegment);
+                }
+            } else {
+                csoundEventString.invoke(csoundInstance, scoreTextSegment, async);
+            }
+
         } catch (Throwable t) {
             t.printStackTrace();
         }
@@ -585,6 +653,15 @@ public class Csound {
      */
     public int getChannels(int isInput) {
         try {
+
+            if(isCsound6) {
+                if(isInput == 1) {
+                    return (int) csoundGetNchnlsInput.invokeExact(csoundInstance);
+                } else {
+                    return (int) csoundGetNchnls.invokeExact(csoundInstance);
+                }
+            }
+
             return (int) csoundGetChannels.invokeExact(csoundInstance, isInput);
         } catch (Throwable t) {
             t.printStackTrace();
